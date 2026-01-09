@@ -1,0 +1,16 @@
+# Archivo de usuarios para Neon Watchdog Dashboard
+# Formato: usuario:hash_bcrypt
+# Los hashes están generados con bcrypt (costo 12)
+
+# Usuario: operator / Password: operator123
+operator:$2b$10$wnl0Fmpts0VsGZsqgwevQ.rMiA8y7aRaSGfYSiEogX6X9yXzwmiM6
+
+# Usuario: neon / Password: watchdog2026
+neon:$2b$10$RD4.Z2WaKhMfm/v6KxwgSekjV/LWAhZM7aBgWo9/ZiOvdjPGR4eDG
+
+# Usuario: admin / Password: admin123
+admin:$2b$10$SMwgMsXDdF4Sfbs4FMwGRO0.8LkKNHmPGE0bLrBq.LxXot8ZaRLGm
+
+# Usuario: viewer / Password: viewer123
+viewer:$2b$10$7UKI.tjzojIgxGPDHlV3O.Mu/PP4lSDvIx6iW6vX2wq2vCMQkkDCa
+

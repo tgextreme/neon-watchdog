@@ -16,12 +16,12 @@ import (
 
 // TargetState mantiene el estado de un target
 type TargetState struct {
-	Name                 string    `json:"name"`
-	ConsecutiveFailures  int       `json:"consecutive_failures"`
-	LastCheckTime        time.Time `json:"last_check_time"`
-	LastRestartTime      time.Time `json:"last_restart_time"`
-	RestartsInLastHour   []time.Time `json:"restarts_in_last_hour"`
-	IsHealthy            bool      `json:"is_healthy"`
+	Name                string      `json:"name"`
+	ConsecutiveFailures int         `json:"consecutive_failures"`
+	LastCheckTime       time.Time   `json:"last_check_time"`
+	LastRestartTime     time.Time   `json:"last_restart_time"`
+	RestartsInLastHour  []time.Time `json:"restarts_in_last_hour"`
+	IsHealthy           bool        `json:"is_healthy"`
 }
 
 // State mantiene el estado global del watchdog
@@ -42,7 +42,7 @@ func New(cfg *config.Config, log *logger.Logger) *Engine {
 	state := &State{
 		Targets: make(map[string]*TargetState),
 	}
-	
+
 	// Inicializar estado para cada target
 	for _, target := range cfg.GetActiveTargets() {
 		state.Targets[target.Name] = &TargetState{
@@ -52,7 +52,7 @@ func New(cfg *config.Config, log *logger.Logger) *Engine {
 			RestartsInLastHour:  []time.Time{},
 		}
 	}
-	
+
 	return &Engine{
 		config: cfg,
 		logger: log,
@@ -65,7 +65,7 @@ func (e *Engine) LoadState(path string) error {
 	if path == "" {
 		return nil
 	}
-	
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -73,14 +73,14 @@ func (e *Engine) LoadState(path string) error {
 		}
 		return fmt.Errorf("error reading state file: %w", err)
 	}
-	
+
 	e.state.mu.Lock()
 	defer e.state.mu.Unlock()
-	
+
 	if err := json.Unmarshal(data, e.state); err != nil {
 		return fmt.Errorf("error parsing state file: %w", err)
 	}
-	
+
 	e.logger.Info("state loaded from file", logger.Fields("path", path))
 	return nil
 }
@@ -90,40 +90,40 @@ func (e *Engine) SaveState(path string) error {
 	if path == "" {
 		return nil
 	}
-	
+
 	e.state.mu.RLock()
 	data, err := json.MarshalIndent(e.state, "", "  ")
 	e.state.mu.RUnlock()
-	
+
 	if err != nil {
 		return fmt.Errorf("error marshaling state: %w", err)
 	}
-	
+
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("error writing state file: %w", err)
 	}
-	
+
 	return nil
 }
 
 // CheckOnce ejecuta una pasada de checks sobre todos los targets
 func (e *Engine) CheckOnce(ctx context.Context) bool {
 	allHealthy := true
-	
+
 	for _, target := range e.config.GetActiveTargets() {
 		healthy := e.checkTarget(ctx, target)
 		if !healthy {
 			allHealthy = false
 		}
 	}
-	
+
 	// Guardar estado si está configurado
 	if e.config.StateFile != "" {
 		if err := e.SaveState(e.config.StateFile); err != nil {
 			e.logger.Error("failed to save state", logger.Fields("error", err))
 		}
 	}
-	
+
 	return allHealthy
 }
 
@@ -140,11 +140,11 @@ func (e *Engine) checkTarget(ctx context.Context, target config.Target) bool {
 		e.state.Targets[target.Name] = state
 	}
 	e.state.mu.Unlock()
-	
+
 	// Crear contexto con timeout
 	checkCtx, cancel := context.WithTimeout(ctx, time.Duration(e.config.TimeoutSeconds)*time.Second)
 	defer cancel()
-	
+
 	// Ejecutar todos los checks
 	allChecksPassed := true
 	for _, checkCfg := range target.Checks {
@@ -157,16 +157,16 @@ func (e *Engine) checkTarget(ctx context.Context, target config.Target) bool {
 			allChecksPassed = false
 			continue
 		}
-		
+
 		result := checker.Check(checkCtx)
-		
+
 		fields := logger.Fields(
 			"target", target.Name,
 			"check", result.CheckType,
 			"result", map[string]bool{"OK": true, "FAIL": false}[fmt.Sprintf("%v", result.Success)],
 			"latency_ms", result.Latency.Milliseconds(),
 		)
-		
+
 		if result.Success {
 			e.logger.Debug("check passed", fields)
 		} else {
@@ -179,11 +179,11 @@ func (e *Engine) checkTarget(ctx context.Context, target config.Target) bool {
 			allChecksPassed = false
 		}
 	}
-	
+
 	// Actualizar estado
 	e.state.mu.Lock()
 	state.LastCheckTime = time.Now()
-	
+
 	if allChecksPassed {
 		if !state.IsHealthy {
 			e.logger.Info("target recovered", logger.Fields("target", target.Name))
@@ -193,31 +193,31 @@ func (e *Engine) checkTarget(ctx context.Context, target config.Target) bool {
 		e.state.mu.Unlock()
 		return true
 	}
-	
+
 	// El target falló
 	state.ConsecutiveFailures++
 	state.IsHealthy = false
 	consecutiveFailures := state.ConsecutiveFailures
 	e.state.mu.Unlock()
-	
+
 	e.logger.Warn("target unhealthy", logger.Fields(
 		"target", target.Name,
 		"consecutive_failures", consecutiveFailures,
 		"threshold", target.Policy.FailThreshold,
 	))
-	
+
 	// Decidir si ejecutar acción de recuperación
 	if consecutiveFailures >= target.Policy.FailThreshold {
 		e.executeRecoveryAction(ctx, target, state)
 	}
-	
+
 	return false
 }
 
 // executeRecoveryAction ejecuta la acción de recuperación para un target
 func (e *Engine) executeRecoveryAction(ctx context.Context, target config.Target, state *TargetState) {
 	e.state.mu.Lock()
-	
+
 	// Verificar cooldown
 	if !state.LastRestartTime.IsZero() {
 		cooldown := time.Duration(target.Policy.RestartCooldownSeconds) * time.Second
@@ -226,16 +226,16 @@ func (e *Engine) executeRecoveryAction(ctx context.Context, target config.Target
 			e.state.mu.Unlock()
 			e.logger.Warn("restart blocked by cooldown", logger.Fields(
 				"target", target.Name,
-				"cooldown_remaining_seconds", (cooldown - timeSinceLastRestart).Seconds(),
+				"cooldown_remaining_seconds", (cooldown-timeSinceLastRestart).Seconds(),
 			))
 			return
 		}
 	}
-	
+
 	// Verificar rate limit (reinicios por hora)
 	now := time.Now()
 	oneHourAgo := now.Add(-1 * time.Hour)
-	
+
 	// Filtrar reinicios de la última hora
 	recentRestarts := []time.Time{}
 	for _, t := range state.RestartsInLastHour {
@@ -244,7 +244,7 @@ func (e *Engine) executeRecoveryAction(ctx context.Context, target config.Target
 		}
 	}
 	state.RestartsInLastHour = recentRestarts
-	
+
 	if len(state.RestartsInLastHour) >= target.Policy.MaxRestartsPerHour {
 		e.state.mu.Unlock()
 		e.logger.Error("restart blocked by rate limit", logger.Fields(
@@ -254,12 +254,12 @@ func (e *Engine) executeRecoveryAction(ctx context.Context, target config.Target
 		))
 		return
 	}
-	
+
 	e.state.mu.Unlock()
-	
+
 	// Crear acción
 	isFirstFailure := state.ConsecutiveFailures == target.Policy.FailThreshold
-	action, err := actions.NewAction(target.Action, isFirstFailure)
+	action, err := actions.NewAction(target.Action, isFirstFailure, e.logger)
 	if err != nil {
 		e.logger.Error("failed to create action", logger.Fields(
 			"target", target.Name,
@@ -267,19 +267,19 @@ func (e *Engine) executeRecoveryAction(ctx context.Context, target config.Target
 		))
 		return
 	}
-	
+
 	e.logger.Info("executing recovery action", logger.Fields(
 		"target", target.Name,
 		"action", action.Name(),
 		"consecutive_failures", state.ConsecutiveFailures,
 	))
-	
+
 	// Ejecutar acción con timeout
 	actionCtx, cancel := context.WithTimeout(ctx, time.Duration(e.config.TimeoutSeconds)*time.Second)
 	defer cancel()
-	
+
 	result := action.Execute(actionCtx)
-	
+
 	// Actualizar estado
 	e.state.mu.Lock()
 	if result.Success {
@@ -287,7 +287,7 @@ func (e *Engine) executeRecoveryAction(ctx context.Context, target config.Target
 		state.RestartsInLastHour = append(state.RestartsInLastHour, now)
 		state.ConsecutiveFailures = 0 // Reset after successful restart
 		e.state.mu.Unlock()
-		
+
 		e.logger.Info("recovery action succeeded", logger.Fields(
 			"target", target.Name,
 			"action", action.Name(),
@@ -309,18 +309,18 @@ func (e *Engine) Run(ctx context.Context) error {
 	if e.config.IntervalSeconds <= 0 {
 		return fmt.Errorf("interval_seconds must be > 0 for daemon mode")
 	}
-	
+
 	e.logger.Info("starting watchdog daemon", logger.Fields(
 		"interval_seconds", e.config.IntervalSeconds,
 		"targets", len(e.config.GetActiveTargets()),
 	))
-	
+
 	ticker := time.NewTicker(time.Duration(e.config.IntervalSeconds) * time.Second)
 	defer ticker.Stop()
-	
+
 	// Primera ejecución inmediata
 	e.CheckOnce(ctx)
-	
+
 	for {
 		select {
 		case <-ctx.Done():

@@ -16,7 +16,7 @@ default_policy:
 targets:
   # Ejemplo 1: Monitorizar nginx con systemd
   - name: nginx
-    enabled: true
+    enabled: false  # Deshabilitado para evitar sudo
     checks:
       - type: process_name
         process_name: nginx
@@ -30,7 +30,7 @@ targets:
 
   # Ejemplo 2: Monitorizar una aplicación custom con PID file
   - name: myapp
-    enabled: true
+    enabled: false  # Deshabilitado para evitar sudo
     checks:
       - type: pid_file
         pid_file: /var/run/myapp.pid
@@ -48,7 +48,7 @@ targets:
 
   # Ejemplo 3: Healthcheck HTTP con comando curl
   - name: api-service
-    enabled: true
+    enabled: false  # Deshabilitado para evitar sudo
     checks:
       - type: command
         command:

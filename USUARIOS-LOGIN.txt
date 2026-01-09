@@ -1,0 +1,31 @@
+===============================================
+  🔐 USUARIOS DISPONIBLES - NEON WATCHDOG
+===============================================
+
+Usuario: admin
+Password: admin123
+---
+
+Usuario: viewer  
+Password: viewer123
+---
+
+Usuario: operator
+Password: operator123
+---
+
+Usuario: neon
+Password: watchdog2026
+
+===============================================
+
+📌 IMPORTANTE:
+   NO uses tu usuario del sistema operativo
+   Usa uno de los usuarios de arriba
+   
+🌐 URL: http://localhost:8080
+
+✅ Probado con curl:
+   curl -u admin:admin123 http://localhost:8080/api/status
+   
+   ✓ Funciona correctamente

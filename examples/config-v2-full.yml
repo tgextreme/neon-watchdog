@@ -1,0 +1,262 @@
+# 🚀 Neon Watchdog v2.0 - Configuración Completa con TODAS las Features
+
+# =============================================================================
+# CONFIGURACIÓN GLOBAL
+# =============================================================================
+interval_seconds: 30
+timeout_seconds: 10
+log_level: INFO
+state_file: /var/lib/neon-watchdog/state.json
+
+# =============================================================================
+# NOTIFICACIONES (Email, Webhook, Telegram)
+# =============================================================================
+notifications:
+  - type: email
+    enabled: false  # Habilitar cuando configures SMTP
+    email:
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      username: your-email@gmail.com
+      password: your-app-password
+      from: watchdog@example.com
+      to:
+        - admin@example.com
+        - ops@example.com
+      use_tls: true
+
+  - type: webhook
+    enabled: false  # Habilitar para Slack/Discord/PagerDuty
+    webhook:
+      url: https://hooks.slack.com/services/YOUR/WEBHOOK/HERE
+      method: POST
+      headers:
+        Content-Type: application/json
+      timeout: 10
+
+  - type: telegram
+    enabled: false  # Habilitar con tu bot
+    telegram:
+      bot_token: "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+      chat_id: "-1001234567890"
+
+# =============================================================================
+# MÉTRICAS PROMETHEUS
+# =============================================================================
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
+
+# =============================================================================
+# DASHBOARD WEB
+# =============================================================================
+dashboard:
+  enabled: true
+  port: 8080
+  path: /
+
+# =============================================================================
+# HISTORIAL Y ESTADÍSTICAS
+# =============================================================================
+history:
+  max_entries: 1000
+  retention_hours: 168  # 7 días
+
+# =============================================================================
+# POLÍTICA POR DEFECTO
+# =============================================================================
+default_policy:
+  fail_threshold: 1
+  restart_cooldown_seconds: 60
+  max_restarts_per_hour: 10
+  backoff_strategy: exponential  # linear o exponential
+  max_backoff_seconds: 3600      # 1 hora máximo
+
+# =============================================================================
+# TARGETS A MONITORIZAR
+# =============================================================================
+targets:
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 1: Nginx con HTTP health check + hooks
+  # ---------------------------------------------------------------------------
+  - name: nginx
+    enabled: true
+    checks:
+      - type: http
+        http:
+          url: http://localhost:80/
+          method: GET
+          expected_status: 200
+          timeout_seconds: 5
+      - type: process_name
+        process_name: nginx
+    action:
+      type: systemd
+      systemd:
+        unit: nginx.service
+        method: restart
+      hooks:
+        before_restart:
+          - /usr/local/bin/backup-nginx-logs.sh
+        after_restart:
+          - /usr/local/bin/notify-team.sh nginx recovered
+        on_failure:
+          - /usr/local/bin/emergency-alert.sh nginx failed
+
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 2: PostgreSQL con dependency chain
+  # ---------------------------------------------------------------------------
+  - name: postgresql
+    enabled: true
+    checks:
+      - type: process_name
+        process_name: postgres
+      - type: tcp_port
+        tcp_port: "5432"
+      - type: script
+        script:
+          path: /usr/local/bin/check-postgres-health.sh
+          success_exit_codes: [0]
+          warning_exit_codes: [1]
+    action:
+      type: systemd
+      systemd:
+        unit: postgresql.service
+    policy:
+      fail_threshold: 2
+      restart_cooldown_seconds: 120
+
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 3: Backend API (depende de PostgreSQL)
+  # ---------------------------------------------------------------------------
+  - name: backend-api
+    enabled: true
+    depends_on:
+      - postgresql
+    checks:
+      - type: logic
+        logic: AND
+        checks:
+          - type: process_name
+            process_name: api-server
+          - type: http
+            http:
+              url: http://localhost:3000/health
+              method: GET
+              expected_status: 200
+              headers:
+                Authorization: "Bearer health-check-token"
+    action:
+      type: systemd
+      systemd:
+        unit: backend-api.service
+
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 4: Redis con graceful shutdown detection
+  # ---------------------------------------------------------------------------
+  - name: redis
+    enabled: true
+    checks:
+      - type: process_name
+        process_name: redis-server
+        ignore_exit_codes: [0, 143]  # 0=normal, 143=SIGTERM
+      - type: tcp_port
+        tcp_port: "6379"
+    action:
+      type: systemd
+      systemd:
+        unit: redis.service
+    policy:
+      fail_threshold: 1
+      restart_cooldown_seconds: 30
+      max_restarts_per_hour: 20
+
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 5: Microservicio con OR logic (múltiples puertos)
+  # ---------------------------------------------------------------------------
+  - name: microservice
+    enabled: true
+    checks:
+      - type: logic
+        logic: OR
+        checks:
+          - type: tcp_port
+            tcp_port: "8080"
+          - type: tcp_port
+            tcp_port: "8081"  # Fallback port
+          - type: tcp_port
+            tcp_port: "8082"  # Otro fallback
+    action:
+      type: exec
+      exec:
+        restart:
+          - /usr/local/bin/restart-microservice.sh
+
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 6: Custom daemon con script check avanzado
+  # ---------------------------------------------------------------------------
+  - name: custom-daemon
+    enabled: false
+    checks:
+      - type: script
+        script:
+          path: /opt/healthchecks/daemon-check.sh
+          args:
+            - --strict
+            - --timeout=5
+          success_exit_codes: [0]
+          warning_exit_codes: [1]  # Warning pero no restart
+    action:
+      type: exec
+      exec:
+        start:
+          - /usr/local/bin/start-daemon.sh
+        restart:
+          - /usr/local/bin/restart-daemon.sh
+      hooks:
+        before_restart:
+          - /usr/local/bin/dump-daemon-state.sh
+        after_restart:
+          - sleep 2
+        on_failure:
+          - /usr/local/bin/alert-ops.sh
+
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 7: Apache con PID file + backoff exponencial
+  # ---------------------------------------------------------------------------
+  - name: apache2
+    enabled: false
+    checks:
+      - type: pid_file
+        pid_file: /var/run/apache2/apache2.pid
+      - type: tcp_port
+        tcp_port: "80"
+    action:
+      type: systemd
+      systemd:
+        unit: apache2.service
+    policy:
+      fail_threshold: 1
+      restart_cooldown_seconds: 60
+      max_restarts_per_hour: 10
+      backoff_strategy: exponential
+      max_backoff_seconds: 1800  # 30 minutos máximo
+
+  # ---------------------------------------------------------------------------
+  # EJEMPLO 8: Aplicación con command check
+  # ---------------------------------------------------------------------------
+  - name: app-with-command-check
+    enabled: false
+    checks:
+      - type: command
+        command:
+          - /usr/bin/curl
+          - -fsS
+          - --max-time
+          - "5"
+          - http://localhost:9000/ping
+    action:
+      type: systemd
+      systemd:
+        unit: myapp.service

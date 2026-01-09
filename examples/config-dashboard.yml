@@ -1,0 +1,77 @@
+# Neon Watchdog - Configuración con Dashboard Web Habilitado
+
+# Configuración global
+interval_seconds: 30
+timeout_seconds: 10
+log_level: INFO
+state_file: ./state.json  # En directorio local para no necesitar sudo
+
+# =============================================================================
+# 🌐 DASHBOARD WEB - Visualización y Gestión
+# =============================================================================
+dashboard:
+  enabled: true
+  port: 8080
+  path: "/"
+
+# =============================================================================
+# 📊 MÉTRICAS PROMETHEUS (Opcional)
+# =============================================================================
+metrics:
+  enabled: false  # Cambiar a true si quieres métricas en /metrics
+  port: 9090
+
+# =============================================================================
+# 📜 HISTORIAL (Opcional)
+# =============================================================================
+history:
+  enabled: false  # Cambiar a true para guardar histórico
+  file: ./watchdog-history.json
+
+# Política por defecto
+default_policy:
+  fail_threshold: 1
+  restart_cooldown_seconds: 60
+  max_restarts_per_hour: 10
+
+# =============================================================================
+# 🎯 TARGETS - Servicios a Monitorizar
+# =============================================================================
+targets:
+  # Ejemplo: Monitorizar proceso (sin sudo necesario)
+  - name: ejemplo-proceso
+    enabled: false  # Cambiar a true para activar
+    description: "Proceso de ejemplo"
+    checks:
+      - type: process_name
+        process_name: mi-proceso
+    action:
+      type: exec
+      exec:
+        restart:
+          - /usr/bin/killall
+          - -HUP
+          - mi-proceso
+
+  # Los servicios deshabilitados no causan errores
+  - name: nginx
+    enabled: false
+    checks:
+      - type: process_name
+        process_name: nginx
+    action:
+      type: systemd
+      systemd:
+        unit: nginx.service
+        method: restart
+
+  - name: postgresql
+    enabled: false
+    checks:
+      - type: tcp_port
+        tcp_port: "5432"
+    action:
+      type: systemd
+      systemd:
+        unit: postgresql.service
+        method: restart
