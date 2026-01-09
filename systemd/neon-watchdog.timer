@@ -1,0 +1,14 @@
+[Unit]
+Description=Neon Watchdog Check Timer
+Documentation=https://github.com/yourusername/neon-watchdog
+
+[Timer]
+# Ejecutar cada 30 segundos
+OnBootSec=10s
+OnUnitActiveSec=30s
+
+# Persistir el timer a través de reinicios
+Persistent=true
+
+[Install]
+WantedBy=timers.target

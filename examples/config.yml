@@ -1,0 +1,96 @@
+# Ejemplo de configuración para Neon Watchdog
+
+# Configuración global
+interval_seconds: 30           # Solo usado en modo daemon
+timeout_seconds: 10            # Timeout para checks y acciones
+log_level: INFO                # DEBUG, INFO, WARN, ERROR
+state_file: /var/lib/neon-watchdog/state.json  # Opcional: persistencia de estado
+
+# Política por defecto (se aplica a todos los targets que no la sobrescriban)
+default_policy:
+  fail_threshold: 1                  # Número de fallos consecutivos antes de reiniciar
+  restart_cooldown_seconds: 60       # Tiempo mínimo entre reinicios
+  max_restarts_per_hour: 10          # Límite de reinicios por hora
+
+# Targets a monitorizar
+targets:
+  # Ejemplo 1: Monitorizar nginx con systemd
+  - name: nginx
+    enabled: true
+    checks:
+      - type: process_name
+        process_name: nginx
+      - type: tcp_port
+        tcp_port: "127.0.0.1:80"
+    action:
+      type: systemd
+      systemd:
+        unit: nginx.service
+        method: restart
+
+  # Ejemplo 2: Monitorizar una aplicación custom con PID file
+  - name: myapp
+    enabled: true
+    checks:
+      - type: pid_file
+        pid_file: /var/run/myapp.pid
+      - type: tcp_port
+        tcp_port: "8080"
+    action:
+      type: exec
+      exec:
+        restart:
+          - /usr/local/bin/myapp-restart.sh
+    policy:
+      fail_threshold: 2              # Sobrescribe el default
+      restart_cooldown_seconds: 120
+      max_restarts_per_hour: 5
+
+  # Ejemplo 3: Healthcheck HTTP con comando curl
+  - name: api-service
+    enabled: true
+    checks:
+      - type: command
+        command:
+          - /usr/bin/curl
+          - -fsS
+          - --max-time
+          - "5"
+          - http://127.0.0.1:3000/health
+    action:
+      type: systemd
+      systemd:
+        unit: api-service.service
+        method: restart
+
+  # Ejemplo 4: Monitorizar PostgreSQL
+  - name: postgresql
+    enabled: false  # Deshabilitado por defecto
+    checks:
+      - type: process_name
+        process_name: postgres
+      - type: tcp_port
+        tcp_port: "5432"
+    action:
+      type: systemd
+      systemd:
+        unit: postgresql.service
+        method: restart
+
+  # Ejemplo 5: Aplicación con comando de inicio personalizado
+  - name: custom-daemon
+    enabled: false
+    checks:
+      - type: process_name
+        process_name: my-daemon
+    action:
+      type: exec
+      exec:
+        start:
+          - /usr/local/bin/my-daemon
+          - --config
+          - /etc/my-daemon/config.ini
+        restart:
+          - /usr/bin/systemctl
+          - restart
+          - my-daemon.service

@@ -1,0 +1,24 @@
+[Unit]
+Description=Neon Watchdog - Process Guardian
+Documentation=https://github.com/yourusername/neon-watchdog
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/neon-watchdog check -c /etc/neon-watchdog/config.yml
+
+# Usuario dedicado (opcional, descomenta si creas un usuario específico)
+# User=neon-watchdog
+# Group=neon-watchdog
+
+# Seguridad
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=neon-watchdog
+
+[Install]
+WantedBy=multi-user.target
