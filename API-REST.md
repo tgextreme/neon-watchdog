@@ -180,24 +180,23 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
   -d '{
     "name": "nginx",
     "enabled": true,
-    "check": {
-      "type": "systemd",
-      "systemd": {
-        "service": "nginx.service"
-      }
-    },
-    "actions": [
+    "checks": [
       {
-        "type": "systemd_restart",
-        "systemd_restart": {
-          "service": "nginx.service"
-        }
+        "type": "process_name",
+        "process_name": "nginx"
       }
     ],
-    "thresholds": {
-      "max_failures": 3,
-      "check_interval_seconds": 30,
-      "restart_delay_seconds": 5
+    "action": {
+      "type": "systemd",
+      "systemd": {
+        "unit": "nginx.service",
+        "method": "restart"
+      }
+    },
+    "policy": {
+      "fail_threshold": 3,
+      "restart_cooldown_seconds": 60,
+      "max_restarts_per_hour": 10
     }
   }'
 ```
@@ -210,26 +209,23 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
   -d '{
     "name": "database",
     "enabled": true,
-    "check": {
-      "type": "tcp_port",
-      "tcp_port": {
-        "host": "localhost",
-        "port": 3306,
-        "timeout_seconds": 5
-      }
-    },
-    "actions": [
+    "checks": [
       {
-        "type": "systemd_restart",
-        "systemd_restart": {
-          "service": "mysql.service"
-        }
+        "type": "tcp_port",
+        "tcp_port": "3306"
       }
     ],
-    "thresholds": {
-      "max_failures": 5,
-      "check_interval_seconds": 60,
-      "restart_delay_seconds": 10
+    "action": {
+      "type": "systemd",
+      "systemd": {
+        "unit": "mysql.service",
+        "method": "restart"
+      }
+    },
+    "policy": {
+      "fail_threshold": 5,
+      "restart_cooldown_seconds": 120,
+      "max_restarts_per_hour": 5
     }
   }'
 ```
@@ -242,27 +238,27 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
   -d '{
     "name": "api-backend",
     "enabled": true,
-    "check": {
-      "type": "http",
-      "http": {
-        "url": "http://localhost:8000/health",
-        "method": "GET",
-        "expected_status": 200,
-        "timeout_seconds": 10
-      }
-    },
-    "actions": [
+    "checks": [
       {
-        "type": "command",
-        "command": {
-          "cmd": "systemctl restart api-backend.service"
+        "type": "http",
+        "http": {
+          "url": "http://localhost:8000/health",
+          "method": "GET",
+          "expected_status": 200,
+          "timeout_seconds": 10
         }
       }
     ],
-    "thresholds": {
-      "max_failures": 2,
-      "check_interval_seconds": 30,
-      "restart_delay_seconds": 3
+    "action": {
+      "type": "exec",
+      "exec": {
+        "restart": ["systemctl", "restart", "api-backend.service"]
+      }
+    },
+    "policy": {
+      "fail_threshold": 2,
+      "restart_cooldown_seconds": 60,
+      "max_restarts_per_hour": 8
     }
   }'
 ```
@@ -275,25 +271,22 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
   -d '{
     "name": "python-app",
     "enabled": true,
-    "check": {
-      "type": "process",
-      "process": {
-        "name": "python3",
-        "cmdline_contains": "app.py"
-      }
-    },
-    "actions": [
+    "checks": [
       {
-        "type": "command",
-        "command": {
-          "cmd": "/opt/app/start.sh"
-        }
+        "type": "process_name",
+        "process_name": "python3"
       }
     ],
-    "thresholds": {
-      "max_failures": 3,
-      "check_interval_seconds": 30,
-      "restart_delay_seconds": 5
+    "action": {
+      "type": "exec",
+      "exec": {
+        "restart": ["/opt/app/start.sh"]
+      }
+    },
+    "policy": {
+      "fail_threshold": 3,
+      "restart_cooldown_seconds": 60,
+      "max_restarts_per_hour": 10
     }
   }'
 ```
@@ -301,8 +294,11 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
 **Respuesta (201 Created):**
 ```json
 {
-  "message": "target created successfully",
-  "name": "nginx"
+  "name": "nginx",
+  "enabled": true,
+  "checks": [...],
+  "action": {...},
+  "policy": {...}
 }
 ```
 
@@ -328,24 +324,23 @@ curl -u admin:admin123 -X PUT http://localhost:8080/api/targets/apache \
   -d '{
     "name": "apache",
     "enabled": true,
-    "check": {
-      "type": "systemd",
-      "systemd": {
-        "service": "apache2.service"
-      }
-    },
-    "actions": [
+    "checks": [
       {
-        "type": "systemd_restart",
-        "systemd_restart": {
-          "service": "apache2.service"
-        }
+        "type": "tcp_port",
+        "tcp_port": "80"
       }
     ],
-    "thresholds": {
-      "max_failures": 5,
-      "check_interval_seconds": 60,
-      "restart_delay_seconds": 10
+    "action": {
+      "type": "systemd",
+      "systemd": {
+        "unit": "apache2.service",
+        "method": "restart"
+      }
+    },
+    "policy": {
+      "fail_threshold": 5,
+      "restart_cooldown_seconds": 120,
+      "max_restarts_per_hour": 8
     }
   }'
 ```
@@ -353,8 +348,11 @@ curl -u admin:admin123 -X PUT http://localhost:8080/api/targets/apache \
 **Respuesta (200 OK):**
 ```json
 {
-  "message": "target updated successfully",
-  "name": "apache"
+  "name": "apache",
+  "enabled": true,
+  "checks": [...],
+  "action": {...},
+  "policy": {...}
 }
 ```
 

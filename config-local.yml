@@ -1,0 +1,28 @@
+interval_seconds: 30
+timeout_seconds: 10
+log_level: INFO
+state_file: state-local.json
+default_policy:
+    fail_threshold: 3
+    restart_cooldown_seconds: 60
+    max_restarts_per_hour: 10
+targets:
+    - name: example-ssh
+      enabled: false
+      checks:
+        - type: tcp_port
+          tcp_port: "22"
+      action:
+        type: exec
+        exec:
+            restart:
+                - /bin/echo
+                - SSH port check
+      policy:
+        fail_threshold: 3
+        restart_cooldown_seconds: 60
+        max_restarts_per_hour: 5
+dashboard:
+    enabled: true
+    port: 8080
+    path: /
