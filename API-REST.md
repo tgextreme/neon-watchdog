@@ -1,22 +1,64 @@
-# 🚀 API REST - Neon Watchdog Dashboard
+# API REST - Neon Watchdog Dashboard
+
+Documentación completa de la API REST y Dashboard Web de Neon Watchdog.
 
 ## 📋 Descripción
 
-API REST completa para gestionar servicios monitoreados **sin editar archivos YAML**. Todas las operaciones guardan automáticamente en el archivo de configuración.
+La API REST permite gestionar servicios monitoreados, ver el estado del sistema y realizar operaciones sin necesidad de editar archivos YAML. Todas las operaciones guardan automáticamente en el archivo de configuración.
 
 ## 🔐 Autenticación
 
 Todas las peticiones requieren **HTTP Basic Authentication**:
 
 ```bash
-curl -u admin:admin123 http://localhost:8080/api/...
+curl -u usuario:password http://localhost:8080/api/...
 ```
 
-**Usuarios disponibles**: Ver [USUARIOS-LOGIN.txt](USUARIOS-LOGIN.txt)
+### Crear Usuarios
+
+```bash
+# Usando htpasswd
+htpasswd -B -c users.txt admin
+
+# O manualmente con bcrypt
+# El archivo users.txt debe estar en el directorio de ejecución
+# Formato: usuario:hash_bcrypt
+```
+
+**Archivo users.txt de ejemplo:**
+```
+admin:$2a$10$abcdefghijklmnopqrstuvwxyz1234567890
+user2:$2a$10$zyxwvutsrqponmlkjihgfedcba0987654321
+```
 
 ---
 
-## 📡 Endpoints Disponibles
+## 🌐 Habilitar Dashboard
+
+Añade a tu `config.yml`:
+
+```yaml
+dashboard:
+  enabled: true
+  port: 8080
+  path: "/"
+```
+
+Reinicia el servicio:
+
+```bash
+sudo systemctl restart neon-watchdog.timer
+# o
+sudo systemctl restart neon-watchdog-daemon.service
+```
+
+Acceder:
+- Dashboard Web: `http://localhost:8080/`
+- API REST: `http://localhost:8080/api/`
+
+---
+
+## 📡 Endpoints de la API
 
 ### 1. Ver Estado del Sistema
 
@@ -26,7 +68,7 @@ Retorna el estado completo del watchdog con todos los servicios monitoreados.
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 http://localhost:8080/api/status
+curl -u admin:password http://localhost:8080/api/status
 ```
 
 **Respuesta:**
@@ -35,8 +77,8 @@ curl -u admin:admin123 http://localhost:8080/api/status
   "uptime": 3600000000000,
   "start_time": "2026-01-09T20:00:00Z",
   "targets": {
-    "apache": {
-      "name": "apache",
+    "nginx": {
+      "name": "nginx",
       "healthy": true,
       "enabled": true,
       "last_check": "2026-01-09T21:00:00Z",
@@ -44,6 +86,16 @@ curl -u admin:admin123 http://localhost:8080/api/status
       "total_restarts": 2,
       "last_restart": "2026-01-09T20:30:00Z",
       "message": "Service is running"
+    },
+    "apache": {
+      "name": "apache",
+      "healthy": false,
+      "enabled": true,
+      "last_check": "2026-01-09T21:00:05Z",
+      "consecutive_failures": 3,
+      "total_restarts": 5,
+      "last_restart": "2026-01-09T20:58:00Z",
+      "message": "Connection refused"
     }
   }
 }
@@ -59,10 +111,10 @@ Endpoint rápido para verificar si todos los servicios están saludables.
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 http://localhost:8080/api/health
+curl -u admin:password http://localhost:8080/api/health
 ```
 
-**Respuesta (200 OK):**
+**Respuesta (200 OK) - Todos saludables:**
 ```json
 {
   "status": "healthy",
@@ -70,11 +122,12 @@ curl -u admin:admin123 http://localhost:8080/api/health
 }
 ```
 
-**Respuesta (503 Service Unavailable):**
+**Respuesta (503 Service Unavailable) - Alguno no saludable:**
 ```json
 {
   "status": "unhealthy",
-  "targets": 3
+  "targets": 3,
+  "unhealthy_count": 1
 }
 ```
 
@@ -84,11 +137,11 @@ curl -u admin:admin123 http://localhost:8080/api/health
 
 **GET** `/api/targets`
 
-Obtiene la lista completa de servicios configurados con toda su configuración.
+Obtiene la lista completa de servicios configurados.
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 http://localhost:8080/api/targets
+curl -u admin:password http://localhost:8080/api/targets
 ```
 
 **Respuesta:**
@@ -96,26 +149,30 @@ curl -u admin:admin123 http://localhost:8080/api/targets
 {
   "targets": [
     {
-      "name": "apache",
+      "name": "nginx",
       "enabled": true,
-      "check": {
-        "type": "systemd",
-        "systemd": {
-          "service": "apache2.service"
-        }
-      },
-      "actions": [
+      "depends_on": [],
+      "checks": [
         {
-          "type": "systemd_restart",
-          "systemd_restart": {
-            "service": "apache2.service"
-          }
+          "type": "process_name",
+          "process_name": "nginx"
+        },
+        {
+          "type": "tcp_port",
+          "tcp_port": "80"
         }
       ],
-      "thresholds": {
-        "max_failures": 3,
-        "check_interval_seconds": 30,
-        "restart_delay_seconds": 5
+      "action": {
+        "type": "systemd",
+        "systemd": {
+          "unit": "nginx.service",
+          "method": "restart"
+        }
+      },
+      "policy": {
+        "fail_threshold": 1,
+        "restart_cooldown_seconds": 60,
+        "max_restarts_per_hour": 10
       }
     }
   ]
@@ -132,35 +189,38 @@ Obtiene la configuración completa de un servicio específico.
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 http://localhost:8080/api/targets/apache
+curl -u admin:password http://localhost:8080/api/targets/nginx
 ```
 
 **Respuesta:**
 ```json
 {
-  "name": "apache",
+  "name": "nginx",
   "enabled": true,
-  "check": {
-    "type": "systemd",
-    "systemd": {
-      "service": "apache2.service"
-    }
-  },
-  "actions": [
+  "depends_on": [],
+  "checks": [
     {
-      "type": "systemd_restart",
-      "systemd_restart": {
-        "service": "apache2.service"
-      }
+      "type": "process_name",
+      "process_name": "nginx"
     }
   ],
-  "thresholds": {
-    "max_failures": 3,
-    "check_interval_seconds": 30,
-    "restart_delay_seconds": 5
+  "action": {
+    "type": "systemd",
+    "systemd": {
+      "unit": "nginx.service",
+      "method": "restart"
+    }
+  },
+  "policy": {
+    "fail_threshold": 1,
+    "restart_cooldown_seconds": 60,
+    "max_restarts_per_hour": 10
   }
 }
 ```
+
+**Errores:**
+- `404 Not Found` - El servicio no existe
 
 ---
 
@@ -175,7 +235,7 @@ Añade un nuevo servicio al watchdog. Se guarda automáticamente en el YAML.
 #### Ejemplo 1: Monitorear Servicio Systemd
 
 ```bash
-curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
+curl -u admin:password -X POST http://localhost:8080/api/targets \
   -H "Content-Type: application/json" \
   -d '{
     "name": "nginx",
@@ -184,6 +244,10 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
       {
         "type": "process_name",
         "process_name": "nginx"
+      },
+      {
+        "type": "tcp_port",
+        "tcp_port": "80"
       }
     ],
     "action": {
@@ -204,7 +268,7 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
 #### Ejemplo 2: Monitorear Puerto TCP
 
 ```bash
-curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
+curl -u admin:password -X POST http://localhost:8080/api/targets \
   -H "Content-Type: application/json" \
   -d '{
     "name": "database",
@@ -230,10 +294,10 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
   }'
 ```
 
-#### Ejemplo 3: Monitorear URL HTTP
+#### Ejemplo 3: Monitorear Health Check HTTP
 
 ```bash
-curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
+curl -u admin:password -X POST http://localhost:8080/api/targets \
   -H "Content-Type: application/json" \
   -d '{
     "name": "api-backend",
@@ -250,9 +314,10 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
       }
     ],
     "action": {
-      "type": "exec",
-      "exec": {
-        "restart": ["systemctl", "restart", "api-backend.service"]
+      "type": "systemd",
+      "systemd": {
+        "unit": "api-backend.service",
+        "method": "restart"
       }
     },
     "policy": {
@@ -263,24 +328,24 @@ curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
   }'
 ```
 
-#### Ejemplo 4: Monitorear Proceso
+#### Ejemplo 4: Comando Personalizado
 
 ```bash
-curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
+curl -u admin:password -X POST http://localhost:8080/api/targets \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "python-app",
+    "name": "custom-app",
     "enabled": true,
     "checks": [
       {
-        "type": "process_name",
-        "process_name": "python3"
+        "type": "command",
+        "command": ["/usr/local/bin/check-app.sh"]
       }
     ],
     "action": {
       "type": "exec",
       "exec": {
-        "restart": ["/opt/app/start.sh"]
+        "restart": ["/opt/app/restart.sh"]
       }
     },
     "policy": {
@@ -319,21 +384,29 @@ Actualiza la configuración completa de un servicio existente.
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 -X PUT http://localhost:8080/api/targets/apache \
+curl -u admin:password -X PUT http://localhost:8080/api/targets/nginx \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "apache",
+    "name": "nginx",
     "enabled": true,
     "checks": [
       {
+        "type": "process_name",
+        "process_name": "nginx"
+      },
+      {
         "type": "tcp_port",
         "tcp_port": "80"
+      },
+      {
+        "type": "tcp_port",
+        "tcp_port": "443"
       }
     ],
     "action": {
       "type": "systemd",
       "systemd": {
-        "unit": "apache2.service",
+        "unit": "nginx.service",
         "method": "restart"
       }
     },
@@ -348,11 +421,8 @@ curl -u admin:admin123 -X PUT http://localhost:8080/api/targets/apache \
 **Respuesta (200 OK):**
 ```json
 {
-  "name": "apache",
-  "enabled": true,
-  "checks": [...],
-  "action": {...},
-  "policy": {...}
+  "message": "target updated successfully",
+  "name": "nginx"
 }
 ```
 
@@ -370,14 +440,14 @@ Elimina un servicio del watchdog.
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 -X DELETE http://localhost:8080/api/targets/apache
+curl -u admin:password -X DELETE http://localhost:8080/api/targets/nginx
 ```
 
 **Respuesta (200 OK):**
 ```json
 {
   "message": "target deleted successfully",
-  "name": "apache"
+  "name": "nginx"
 }
 ```
 
@@ -394,401 +464,405 @@ Activa o desactiva el monitoreo de un servicio sin eliminarlo.
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 -X PUT http://localhost:8080/api/targets/apache/toggle
+curl -u admin:password -X PUT http://localhost:8080/api/targets/nginx/toggle
 ```
 
 **Respuesta (200 OK):**
 ```json
 {
   "message": "target toggled successfully",
-  "name": "apache",
+  "name": "nginx",
   "enabled": false
 }
 ```
 
 ---
 
-### 9. Obtener Configuración Completa
+### 9. Actualizar Solo Estado (Enable/Disable)
 
-**GET** `/api/config`
+**PATCH** `/api/targets/{name}`
 
-Descarga la configuración completa del watchdog en formato YAML.
+Actualiza solo el estado enabled de un servicio.
+
+**Content-Type:** `application/json`
 
 **Ejemplo:**
 ```bash
-curl -u admin:admin123 http://localhost:8080/api/config
+curl -u admin:password -X PATCH http://localhost:8080/api/targets/nginx \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
 ```
 
-**Respuesta (Content-Type: text/yaml):**
-```yaml
-dashboard:
-  enabled: true
-  port: 8080
-  path: /
-
-targets:
-  - name: apache
-    enabled: true
-    check:
-      type: systemd
-      systemd:
-        service: apache2.service
-    actions:
-      - type: systemd_restart
-        systemd_restart:
-          service: apache2.service
-    thresholds:
-      max_failures: 3
-      check_interval_seconds: 30
-      restart_delay_seconds: 5
+**Respuesta (200 OK):**
+```json
+{
+  "message": "target state updated",
+  "name": "nginx",
+  "enabled": false
+}
 ```
 
 ---
 
-## 📦 Estructura de Datos
+### 10. Ver Configuración Completa
 
-### Target (Servicio)
+**GET** `/api/config`
 
+Obtiene la configuración completa del watchdog (incluyendo global y targets).
+
+**Ejemplo:**
+```bash
+curl -u admin:password http://localhost:8080/api/config
+```
+
+**Respuesta:**
 ```json
 {
-  "name": "string",           // Nombre único del servicio
-  "enabled": boolean,         // Si está activo el monitoreo
-  "check": {                  // Configuración del check
-    "type": "string",         // Tipo: systemd|tcp_port|http|process|command
-    ...                       // Configuración específica del tipo
+  "interval_seconds": 30,
+  "timeout_seconds": 10,
+  "log_level": "INFO",
+  "state_file": "/var/lib/neon-watchdog/state.json",
+  "default_policy": {
+    "fail_threshold": 1,
+    "restart_cooldown_seconds": 60,
+    "max_restarts_per_hour": 10
   },
-  "actions": [                // Acciones a ejecutar en caso de fallo
-    {
-      "type": "string",       // Tipo: systemd_restart|command|webhook
-      ...                     // Configuración específica
-    }
-  ],
-  "thresholds": {             // Umbrales de fallo
-    "max_failures": number,   // Fallos consecutivos antes de actuar
-    "check_interval_seconds": number,  // Intervalo entre checks
-    "restart_delay_seconds": number    // Espera después de restart
-  }
-}
-```
-
-### Tipos de Check Disponibles
-
-#### 1. systemd
-```json
-{
-  "type": "systemd",
-  "systemd": {
-    "service": "nombre.service"
-  }
-}
-```
-
-#### 2. tcp_port
-```json
-{
-  "type": "tcp_port",
-  "tcp_port": {
-    "host": "localhost",
-    "port": 3306,
-    "timeout_seconds": 5
-  }
-}
-```
-
-#### 3. http
-```json
-{
-  "type": "http",
-  "http": {
-    "url": "http://localhost:8080/health",
-    "method": "GET",
-    "expected_status": 200,
-    "timeout_seconds": 10,
-    "headers": {
-      "Authorization": "Bearer token123"
-    }
-  }
-}
-```
-
-#### 4. process
-```json
-{
-  "type": "process",
-  "process": {
-    "name": "nginx",
-    "cmdline_contains": "master process"
-  }
-}
-```
-
-#### 5. command
-```json
-{
-  "type": "command",
-  "command": {
-    "cmd": "/usr/local/bin/check-health.sh",
-    "expected_exit_code": 0
-  }
-}
-```
-
-### Tipos de Actions Disponibles
-
-#### 1. systemd_restart
-```json
-{
-  "type": "systemd_restart",
-  "systemd_restart": {
-    "service": "apache2.service"
-  }
-}
-```
-
-#### 2. command
-```json
-{
-  "type": "command",
-  "command": {
-    "cmd": "/opt/scripts/restart-app.sh"
-  }
-}
-```
-
-#### 3. webhook
-```json
-{
-  "type": "webhook",
-  "webhook": {
-    "url": "https://api.ejemplo.com/restart",
-    "method": "POST",
-    "headers": {
-      "Authorization": "Bearer token123"
-    },
-    "body": "{\"service\": \"apache\"}"
-  }
+  "targets": [...],
+  "notifications": [...],
+  "metrics": {...},
+  "dashboard": {...}
 }
 ```
 
 ---
 
-## 🔧 Ejemplos Prácticos Completos
+### 11. Actualizar Configuración Global
 
-### Monitorear Stack Web Completo
+**PUT** `/api/config`
 
+Actualiza la configuración global (no incluye targets).
+
+**Content-Type:** `application/json`
+
+**Ejemplo:**
 ```bash
-# 1. Servidor Web Nginx
-curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
+curl -u admin:password -X PUT http://localhost:8080/api/config \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "nginx",
-    "enabled": true,
-    "check": {
-      "type": "systemd",
-      "systemd": {"service": "nginx.service"}
-    },
-    "actions": [{
-      "type": "systemd_restart",
-      "systemd_restart": {"service": "nginx.service"}
-    }],
-    "thresholds": {
-      "max_failures": 3,
-      "check_interval_seconds": 30,
-      "restart_delay_seconds": 5
+    "log_level": "DEBUG",
+    "timeout_seconds": 15,
+    "default_policy": {
+      "fail_threshold": 2,
+      "restart_cooldown_seconds": 90,
+      "max_restarts_per_hour": 8
     }
   }'
+```
 
-# 2. Base de Datos MySQL
-curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
+**Respuesta (200 OK):**
+```json
+{
+  "message": "configuration updated successfully"
+}
+```
+
+---
+
+### 12. Validar Configuración
+
+**POST** `/api/config/validate`
+
+Valida la configuración actual sin guardarla.
+
+**Content-Type:** `application/json`
+
+**Ejemplo:**
+```bash
+curl -u admin:password -X POST http://localhost:8080/api/config/validate \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "mysql",
-    "enabled": true,
-    "check": {
-      "type": "tcp_port",
-      "tcp_port": {"host": "localhost", "port": 3306, "timeout_seconds": 5}
-    },
-    "actions": [{
-      "type": "systemd_restart",
-      "systemd_restart": {"service": "mysql.service"}
-    }],
-    "thresholds": {
-      "max_failures": 5,
-      "check_interval_seconds": 60,
-      "restart_delay_seconds": 10
-    }
-  }'
-
-# 3. API Backend
-curl -u admin:admin123 -X POST http://localhost:8080/api/targets \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "api",
-    "enabled": true,
-    "check": {
-      "type": "http",
-      "http": {
-        "url": "http://localhost:8000/health",
-        "method": "GET",
-        "expected_status": 200,
-        "timeout_seconds": 10
+    "targets": [
+      {
+        "name": "test",
+        "enabled": true,
+        "checks": [{"type": "tcp_port", "tcp_port": "80"}],
+        "action": {"type": "systemd", "systemd": {"unit": "test.service", "method": "restart"}}
       }
-    },
-    "actions": [{
-      "type": "command",
-      "command": {"cmd": "systemctl restart api.service"}
-    }],
-    "thresholds": {
-      "max_failures": 2,
-      "check_interval_seconds": 30,
-      "restart_delay_seconds": 3
-    }
+    ]
   }'
 ```
 
-### Gestionar Servicios
+**Respuesta (200 OK):**
+```json
+{
+  "valid": true,
+  "message": "configuration is valid"
+}
+```
 
-```bash
-# Ver todos los servicios
-curl -u admin:admin123 http://localhost:8080/api/targets
-
-# Ver estado de uno específico
-curl -u admin:admin123 http://localhost:8080/api/status | jq '.targets.nginx'
-
-# Deshabilitar temporalmente
-curl -u admin:admin123 -X PUT http://localhost:8080/api/targets/nginx/toggle
-
-# Modificar configuración
-curl -u admin:admin123 -X PUT http://localhost:8080/api/targets/nginx \
-  -H "Content-Type: application/json" \
-  -d @nginx-config.json
-
-# Eliminar servicio
-curl -u admin:admin123 -X DELETE http://localhost:8080/api/targets/nginx
+**Respuesta (400 Bad Request):**
+```json
+{
+  "valid": false,
+  "error": "target 'test': check type 'invalid_type' is not supported"
+}
 ```
 
 ---
 
-## 🐛 Códigos de Error
+## 🖥️ Dashboard Web
 
-| Código | Descripción |
-|--------|-------------|
-| 200 | OK - Operación exitosa |
-| 201 | Created - Recurso creado |
-| 400 | Bad Request - JSON inválido o campos faltantes |
-| 401 | Unauthorized - Credenciales incorrectas |
-| 404 | Not Found - Servicio no existe |
-| 409 | Conflict - Ya existe (creación duplicada) |
-| 500 | Internal Server Error - Error del servidor |
+### Interfaz Web
 
----
+El dashboard web proporciona una interfaz visual para:
 
-## 📝 Notas Importantes
+- Ver estado de todos los servicios en tiempo real
+- Ver historial de checks y restarts
+- Habilitar/deshabilitar servicios con un click
+- Añadir nuevos servicios mediante formulario
+- Editar configuración de servicios existentes
+- Ver logs y métricas
 
-### ✅ Ventajas
+### Acceso
 
-- **Sin reinicio**: Cambios aplicados inmediatamente
-- **Persistente**: Guarda automáticamente en YAML
-- **Seguro**: Autenticación en todas las peticiones
-- **RESTful**: API estándar fácil de integrar
-- **JSON**: Formato universal y fácil de usar
-
-### ⚠️ Consideraciones
-
-1. **Autenticación obligatoria**: Todas las peticiones requieren usuario/contraseña
-2. **HTTPS en producción**: Usa proxy reverso (nginx) para HTTPS
-3. **Validación**: La API valida que el JSON sea correcto antes de guardar
-4. **Backup**: Haz backup del YAML antes de cambios masivos
-5. **Firewall**: Protege el puerto 8080 con firewall si expones a internet
-
----
-
-## 🔗 Integración con Herramientas
-
-### Postman
-
-Importa esta colección para probar la API:
-
-1. Crear colección "Neon Watchdog"
-2. Configurar Auth: Type: Basic Auth, Username: admin, Password: admin123
-3. Añadir requests para cada endpoint
-
-### curl + jq (Terminal)
-
-```bash
-# Listar servicios ordenados por salud
-curl -s -u admin:admin123 http://localhost:8080/api/status | \
-  jq '.targets | to_entries | sort_by(.value.healthy) | from_entries'
-
-# Contar servicios por estado
-curl -s -u admin:admin123 http://localhost:8080/api/status | \
-  jq '[.targets[] | select(.enabled)] | group_by(.healthy) | 
-      map({status: (if .[0].healthy then "healthy" else "unhealthy" end), 
-           count: length})'
-
-# Ver solo servicios con problemas
-curl -s -u admin:admin123 http://localhost:8080/api/status | \
-  jq '.targets | to_entries | map(select(.value.enabled and .value.healthy == false))'
+```
+http://localhost:8080/
 ```
 
-### Python Script
+### Características
+
+✅ **Vista de Estado en Tiempo Real**
+- Indicadores visuales (verde/rojo) para cada servicio
+- Tiempo desde último check
+- Número de fallos consecutivos
+- Total de restarts
+
+✅ **Gestión de Servicios**
+- Añadir/editar/eliminar servicios
+- Habilitar/deshabilitar con toggle
+- Validación de formularios
+
+✅ **Historial**
+- Últimos eventos de cada servicio
+- Timeline de restarts
+- Logs filtrados por servicio
+
+✅ **Configuración**
+- Editor YAML integrado
+- Validación en tiempo real
+- Vista previa de cambios
+
+---
+
+## 🔒 Seguridad
+
+### HTTPS (Recomendado para Producción)
+
+Usa un reverse proxy como nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name watchdog.example.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Authorization $http_authorization;
+    }
+}
+```
+
+### Restricciones de IP
+
+```nginx
+location / {
+    allow 192.168.1.0/24;
+    allow 10.0.0.0/8;
+    deny all;
+    
+    proxy_pass http://localhost:8080;
+}
+```
+
+### Rate Limiting
+
+```nginx
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+
+location /api/ {
+    limit_req zone=api burst=20 nodelay;
+    proxy_pass http://localhost:8080;
+}
+```
+
+---
+
+## 🧪 Ejemplos de Integración
+
+### Script de Monitoreo
+
+```bash
+#!/bin/bash
+# check-services.sh - Monitorear servicios via API
+
+API_URL="http://localhost:8080"
+USER="admin"
+PASS="password"
+
+# Obtener estado
+status=$(curl -s -u $USER:$PASS "$API_URL/api/health")
+health=$(echo $status | jq -r '.status')
+
+if [ "$health" != "healthy" ]; then
+    echo "ALERT: System unhealthy!"
+    curl -s -u $USER:$PASS "$API_URL/api/status" | jq '.targets'
+    
+    # Enviar alerta
+    # ...
+fi
+```
+
+### Python Client
 
 ```python
 import requests
 from requests.auth import HTTPBasicAuth
 
-BASE_URL = "http://localhost:8080"
-AUTH = HTTPBasicAuth('admin', 'admin123')
+class NeonWatchdogClient:
+    def __init__(self, base_url, username, password):
+        self.base_url = base_url
+        self.auth = HTTPBasicAuth(username, password)
+    
+    def get_status(self):
+        r = requests.get(f"{self.base_url}/api/status", auth=self.auth)
+        return r.json()
+    
+    def add_target(self, target_config):
+        r = requests.post(
+            f"{self.base_url}/api/targets",
+            json=target_config,
+            auth=self.auth
+        )
+        return r.json()
+    
+    def delete_target(self, name):
+        r = requests.delete(
+            f"{self.base_url}/api/targets/{name}",
+            auth=self.auth
+        )
+        return r.json()
 
-# Listar servicios
-response = requests.get(f"{BASE_URL}/api/targets", auth=AUTH)
-targets = response.json()['targets']
+# Uso
+client = NeonWatchdogClient("http://localhost:8080", "admin", "password")
+status = client.get_status()
+print(f"Uptime: {status['uptime']}")
 
-for target in targets:
-    print(f"{target['name']}: {'✓' if target['enabled'] else '✗'}")
+for name, target in status['targets'].items():
+    print(f"{name}: {'✓' if target['healthy'] else '✗'}")
+```
 
-# Añadir servicio
-new_service = {
-    "name": "redis",
-    "enabled": True,
-    "check": {
-        "type": "tcp_port",
-        "tcp_port": {"host": "localhost", "port": 6379, "timeout_seconds": 5}
+### Terraform Provider (Ejemplo)
+
+```hcl
+resource "neon_watchdog_target" "nginx" {
+  name    = "nginx"
+  enabled = true
+  
+  checks = [
+    {
+      type         = "process_name"
+      process_name = "nginx"
     },
-    "actions": [{
-        "type": "systemd_restart",
-        "systemd_restart": {"service": "redis.service"}
-    }],
-    "thresholds": {
-        "max_failures": 3,
-        "check_interval_seconds": 30,
-        "restart_delay_seconds": 5
+    {
+      type     = "tcp_port"
+      tcp_port = "80"
     }
+  ]
+  
+  action = {
+    type = "systemd"
+    systemd = {
+      unit   = "nginx.service"
+      method = "restart"
+    }
+  }
+  
+  policy = {
+    fail_threshold            = 3
+    restart_cooldown_seconds  = 60
+    max_restarts_per_hour     = 10
+  }
 }
+```
 
-response = requests.post(f"{BASE_URL}/api/targets", json=new_service, auth=AUTH)
-print(response.json())
+---
+
+## 📊 Códigos de Estado HTTP
+
+- **200 OK** - Operación exitosa
+- **201 Created** - Recurso creado
+- **400 Bad Request** - Datos inválidos o JSON malformado
+- **401 Unauthorized** - Autenticación fallida
+- **404 Not Found** - Recurso no encontrado
+- **409 Conflict** - Conflicto (ej: target ya existe)
+- **500 Internal Server Error** - Error del servidor
+- **503 Service Unavailable** - Sistema no saludable (en /health)
+
+---
+
+## 🔍 Troubleshooting API
+
+### Dashboard no accesible
+
+```bash
+# Verificar que está habilitado en config
+grep -A3 "dashboard:" /etc/neon-watchdog/config.yml
+
+# Verificar puerto abierto
+netstat -tlnp | grep :8080
+
+# Verificar logs
+journalctl -u neon-watchdog.service | grep dashboard
+```
+
+### Error 401 Unauthorized
+
+```bash
+# Verificar usuarios en users.txt
+cat users.txt
+
+# Crear usuario nuevo
+htpasswd -B users.txt username
+
+# Test con curl
+curl -v -u username:password http://localhost:8080/api/status
+```
+
+### Cambios no se guardan
+
+```bash
+# Verificar permisos del archivo config
+ls -l /etc/neon-watchdog/config.yml
+
+# Ver logs de escritura
+journalctl -u neon-watchdog.service | grep "config saved"
 ```
 
 ---
 
 ## 📚 Recursos Adicionales
 
-- **Dashboard Web**: http://localhost:8080 (interfaz visual)
-- **Documentación de Checks**: Ver implementaciones en `internal/checks/`
-- **Documentación de Actions**: Ver implementaciones en `internal/actions/`
-- **Usuarios**: Ver [USUARIOS-LOGIN.txt](USUARIOS-LOGIN.txt)
+- **[README.md](README.md)** - Documentación general
+- **[INSTALL.md](INSTALL.md)** - Guía de instalación
+- **Ejemplos**: Ver carpeta `examples/` en el repositorio
 
 ---
 
-## 🎯 Próximos Pasos
-
-1. **Prueba la API** con los ejemplos de curl
-2. **Crea tus servicios** adaptando los ejemplos
-3. **Integra con tus scripts** usando Python/Bash
-4. **Monitorea en tiempo real** con el dashboard web
-
-**¿Necesitas ayuda?** Revisa los logs en tiempo real:
-```bash
-tail -f neon-watchdog.log
-```
+**Desarrollado con ❤️ para mantener tus servicios siempre activos**

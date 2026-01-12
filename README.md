@@ -10,86 +10,81 @@
 
 Neon Watchdog es un sistema ligero y robusto para monitorizar servicios críticos en Linux y ejecutar acciones de recuperación automática cuando detecta fallos. Diseñado para integrarse nativamente con **systemd** y ofrecer máxima confiabilidad con mínimo overhead.
 
-### Características principales
+### 🌟 Características Principales
 
-✅ **Múltiples tipos de checks:**
-- Verificación de procesos por nombre
-- Validación de PID files
+✅ **Múltiples Tipos de Checks:**
+- Verificación de procesos por nombre o PID
 - Healthcheck de puertos TCP
-- Ejecución de comandos customizados
+- Validación HTTP/HTTPS con códigos de estado
+- Ejecución de scripts personalizados
+- Comprobación de servicios systemd
+- Checks lógicos (AND/OR) para validaciones complejas
 
-✅ **Acciones de recuperación:**
-- Restart/start de servicios systemd
-- Ejecución de scripts/comandos personalizados
+✅ **Acciones de Recuperación Inteligentes:**
+- Restart/start/stop de servicios systemd
+- Ejecución de comandos personalizados
+- Hooks before/after restart
+- Hooks on failure
 
-✅ **Políticas inteligentes:**
+✅ **Políticas Avanzadas:**
 - Umbrales de fallos consecutivos
 - Cooldown entre reinicios
 - Rate limiting (max reinicios por hora)
+- Estrategias de backoff (linear/exponential)
+- Gestión de dependencias entre servicios
+
+✅ **Dashboard Web y API REST:**
+- Interfaz web para visualización del estado
+- API REST completa con autenticación
+- Gestión de servicios sin editar archivos
+- Actualización en tiempo real
+
+✅ **Métricas y Notificaciones:**
+- Exportación de métricas Prometheus
+- Notificaciones por email, webhook y Telegram
+- Historial persistente de eventos
+- Logging estructurado compatible con journald
 
 ✅ **Integración con systemd:**
-- Modo timer (oneshot) - **recomendado para MVP**
+- Modo timer (oneshot) - recomendado
 - Modo daemon (persistente)
-
-✅ **Logging estructurado:**
-- Formato clave=valor compatible con journald
-- Niveles configurables (DEBUG/INFO/WARN/ERROR)
-
-✅ **Configuración declarativa:**
-- YAML o JSON
-- Validación completa
-- Hot-reload (futuro)
+- Logs integrados con journalctl
 
 ---
 
-## 📦 Instalación
+## 📚 Documentación
 
-### Compilar desde código fuente
-
-```bash
-# Clonar el repositorio
-git clone https://github.com/tgextreme/neon-watchdog.git
-cd neon-watchdog
-
-# Compilar
-make build
-
-# Instalar (requiere permisos sudo)
-sudo make install
-```
-
-### Instalación manual
-
-```bash
-# Compilar el binario
-go build -o neon-watchdog ./cmd/neon-watchdog
-
-# Copiar binario
-sudo cp neon-watchdog /usr/local/bin/
-
-# Crear directorio de configuración
-sudo mkdir -p /etc/neon-watchdog
-
-# Copiar configuración de ejemplo
-sudo cp examples/config.yml /etc/neon-watchdog/
-
-# Instalar archivos systemd
-sudo cp systemd/neon-watchdog.service /etc/systemd/system/
-sudo cp systemd/neon-watchdog.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-```
+- **[INSTALL.md](INSTALL.md)** - Guía completa de instalación y configuración
+- **[API-REST.md](API-REST.md)** - Documentación de la API REST y dashboard web
+- **[LICENSE](LICENSE)** - Licencia MIT
 
 ---
 
 ## 🚀 Inicio Rápido
 
-### 1. Configurar targets
+### Instalación en 3 Pasos
+
+```bash
+# 1. Compilar e instalar
+git clone https://github.com/tgextreme/neon-watchdog.git
+cd neon-watchdog
+make build && sudo make install
+
+# 2. Validar configuración
+neon-watchdog test-config -c /etc/neon-watchdog/config.yml
+
+# 3. Activar systemd timer
+sudo systemctl enable --now neon-watchdog.timer
+```
+
+### Configuración Básica
 
 Edita `/etc/neon-watchdog/config.yml`:
 
 ```yaml
 log_level: INFO
 timeout_seconds: 10
+state_file: /var/lib/neon-watchdog/state.json
 
 default_policy:
   fail_threshold: 1
@@ -111,47 +106,24 @@ targets:
         method: restart
 ```
 
-### 2. Validar configuración
+### Verificar Estado
 
 ```bash
-neon-watchdog test-config -c /etc/neon-watchdog/config.yml
-```
-
-### 3. Probar manualmente
-
-```bash
-# Ejecutar una sola vez
-neon-watchdog check -c /etc/neon-watchdog/config.yml
-
-# Ver logs
-journalctl -f
-```
-
-### 4. Habilitar systemd timer (recomendado)
-
-```bash
-# Habilitar y arrancar el timer
-sudo systemctl enable --now neon-watchdog.timer
-
-# Ver estado
-sudo systemctl status neon-watchdog.timer
-
-# Ver logs
+# Ver logs en tiempo real
 journalctl -u neon-watchdog.service -f
-```
 
-### Alternativa: Modo daemon
+# Ver estado del timer
+systemctl status neon-watchdog.timer
 
-```bash
-# Si prefieres modo daemon en lugar de timer
-sudo systemctl enable --now neon-watchdog-daemon.service
+# Ejecutar check manual
+neon-watchdog check -c /etc/neon-watchdog/config.yml --verbose
 ```
 
 ---
 
 ## 📖 Uso
 
-### Comandos disponibles
+### Comandos Disponibles
 
 ```bash
 # Ejecutar checks una vez (para systemd timer)
@@ -170,7 +142,7 @@ neon-watchdog version
 neon-watchdog help
 ```
 
-### Flags opcionales
+### Opciones
 
 - `-c, --config <path>`: Ruta al archivo de configuración (requerido)
 - `--verbose`: Activar logging detallado (DEBUG)
@@ -178,83 +150,49 @@ neon-watchdog help
 
 ---
 
-## 🔧 Configuración
+## 🔧 Tipos de Checks
 
-### Estructura del archivo de configuración
+### 1. Process Name
 
-Ver [examples/config.yml](examples/config.yml) para ejemplos completos.
-
-#### Sección global
-
-```yaml
-interval_seconds: 30          # Solo para modo daemon
-timeout_seconds: 10           # Timeout para checks/acciones
-log_level: INFO               # DEBUG, INFO, WARN, ERROR
-state_file: /var/lib/neon-watchdog/state.json  # Opcional
-```
-
-#### Política por defecto
-
-```yaml
-default_policy:
-  fail_threshold: 1                  # Fallos consecutivos antes de actuar
-  restart_cooldown_seconds: 60       # Tiempo entre reinicios
-  max_restarts_per_hour: 10          # Rate limit
-```
-
-#### Targets
-
-Cada target representa un servicio/proceso a monitorizar:
-
-```yaml
-targets:
-  - name: mi-servicio
-    enabled: true
-    checks:
-      - type: process_name
-        process_name: nginx
-      - type: tcp_port
-        tcp_port: "8080"
-    action:
-      type: systemd
-      systemd:
-        unit: mi-servicio.service
-        method: restart
-    policy:  # Opcional: sobrescribe default_policy
-      fail_threshold: 2
-      restart_cooldown_seconds: 120
-```
-
-### Tipos de checks
-
-#### 1. Process name
-
-Verifica si existe un proceso con el nombre especificado (usa `pgrep`):
+Verifica si existe un proceso con el nombre especificado:
 
 ```yaml
 - type: process_name
   process_name: nginx
 ```
 
-#### 2. PID file
+### 2. PID File
 
-Valida que el PID en el archivo existe y está corriendo:
+Valida que el PID en el archivo existe:
 
 ```yaml
 - type: pid_file
   pid_file: /var/run/myapp.pid
 ```
 
-#### 3. TCP Port
+### 3. TCP Port
 
 Intenta conectar a un puerto TCP:
 
 ```yaml
 - type: tcp_port
-  tcp_port: "127.0.0.1:8080"  # o solo "8080" (asume localhost)
+  tcp_port: "127.0.0.1:8080"  # o solo "8080"
 ```
 
-#### 4. Command
+### 4. HTTP Check
+
+Realiza petición HTTP y valida el código de estado:
+
+```yaml
+- type: http
+  http:
+    url: http://localhost:8080/health
+    method: GET
+    expected_status: 200
+    timeout_seconds: 5
+```
+
+### 5. Command
 
 Ejecuta un comando y verifica el exit code (0 = success):
 
@@ -263,14 +201,41 @@ Ejecuta un comando y verifica el exit code (0 = success):
   command:
     - /usr/bin/curl
     - -fsS
-    - --max-time
-    - "5"
     - http://localhost:8080/health
 ```
 
-### Tipos de acciones
+### 6. Script
 
-#### 1. Systemd
+Ejecuta un script personalizado:
+
+```yaml
+- type: script
+  script:
+    path: /usr/local/bin/check-app.sh
+    args: ["--verbose"]
+    success_exit_codes: [0]
+    warning_exit_codes: [1]
+```
+
+### 7. Logic Groups
+
+Combina múltiples checks con AND/OR:
+
+```yaml
+- type: logic
+  logic: AND  # o OR
+  checks:
+    - type: process_name
+      process_name: nginx
+    - type: tcp_port
+      tcp_port: "80"
+```
+
+---
+
+## ⚙️ Tipos de Acciones
+
+### 1. Systemd
 
 Ejecuta `systemctl` sobre una unidad:
 
@@ -282,7 +247,7 @@ action:
     method: restart  # restart, start, stop
 ```
 
-#### 2. Exec
+### 2. Exec
 
 Ejecuta comandos personalizados:
 
@@ -290,17 +255,140 @@ Ejecuta comandos personalizados:
 action:
   type: exec
   exec:
-    start:    # Se usa al primer fallo
-      - /usr/local/bin/start-app.sh
-    restart:  # Se usa en fallos subsiguientes
+    restart:
       - /usr/local/bin/restart-app.sh
+      - "--force"
+```
+
+### 3. Action Hooks
+
+Ejecuta comandos antes/después de acciones:
+
+```yaml
+action:
+  type: systemd
+  systemd:
+    unit: myapp.service
+    method: restart
+  hooks:
+    before_restart:
+      - /usr/local/bin/backup-state.sh
+    after_restart:
+      - /usr/local/bin/verify-startup.sh
+    on_failure:
+      - /usr/local/bin/alert-admin.sh
 ```
 
 ---
 
-## 📊 Logs y Observabilidad
+## 📊 Dashboard Web y API REST
 
-### Ver logs con journalctl
+### Habilitar Dashboard
+
+Añade a tu `config.yml`:
+
+```yaml
+dashboard:
+  enabled: true
+  port: 8080
+  path: "/"
+```
+
+### Crear Usuario
+
+```bash
+# Crear archivo de usuarios
+htpasswd -B -c users.txt admin
+
+# O usar generador incluido
+./scripts/create-user.sh admin password123
+```
+
+### Acceder
+
+```bash
+# Dashboard web
+http://localhost:8080/
+
+# API REST
+curl -u admin:password http://localhost:8080/api/status
+```
+
+Ver [API-REST.md](API-REST.md) para documentación completa de la API.
+
+---
+
+## 📈 Métricas Prometheus
+
+### Habilitar Métricas
+
+```yaml
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
+```
+
+### Métricas Disponibles
+
+- `neon_watchdog_check_total` - Total de checks ejecutados
+- `neon_watchdog_check_failures_total` - Total de checks fallidos
+- `neon_watchdog_action_total` - Total de acciones ejecutadas
+- `neon_watchdog_action_failures_total` - Total de acciones fallidas
+- `neon_watchdog_target_healthy` - Estado actual de cada target (1=healthy, 0=unhealthy)
+- `neon_watchdog_check_duration_seconds` - Duración de los checks
+
+---
+
+## 🔔 Notificaciones
+
+### Email
+
+```yaml
+notifications:
+  - type: email
+    enabled: true
+    email:
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      username: alert@example.com
+      password: ${SMTP_PASSWORD}
+      from: neon-watchdog@example.com
+      to:
+        - admin@example.com
+      use_tls: true
+```
+
+### Webhook
+
+```yaml
+notifications:
+  - type: webhook
+    enabled: true
+    webhook:
+      url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+      method: POST
+      headers:
+        Content-Type: application/json
+      timeout: 10
+```
+
+### Telegram
+
+```yaml
+notifications:
+  - type: telegram
+    enabled: true
+    telegram:
+      bot_token: ${TELEGRAM_BOT_TOKEN}
+      chat_id: "-1001234567890"
+```
+
+---
+
+## 📊 Logs
+
+### Ver Logs con journalctl
 
 ```bash
 # Logs en tiempo real
@@ -312,65 +400,19 @@ journalctl -u neon-watchdog.service -n 100
 # Filtrar por nivel
 journalctl -u neon-watchdog.service -p err
 
-# Logs del timer
-journalctl -u neon-watchdog.timer
-```
-
-### Formato de logs
-
-Los logs usan formato estructurado `clave=valor`:
-
-```
-2026-01-09T10:30:45.123Z level=INFO msg="target healthy" target=nginx check=tcp_port result=OK latency_ms=2
-2026-01-09T10:31:15.456Z level=WARN msg="check failed" target=api check=tcp_port reason="connection refused" latency_ms=5
-2026-01-09T10:31:15.789Z level=INFO msg="executing recovery action" target=api action="systemd:restart api.service"
-```
-
-### Filtrar logs por target específico
-
-```bash
+# Filtrar por target específico
 journalctl -u neon-watchdog.service | grep 'target=nginx'
 ```
 
----
+### Formato de Logs
 
-## 🔐 Seguridad y Confiabilidad
+Logs estructurados en formato `clave=valor`:
 
-### Permisos
-
-Para máxima seguridad, crea un usuario dedicado:
-
-```bash
-# Crear usuario
-sudo useradd -r -s /bin/false -d /var/lib/neon-watchdog neon-watchdog
-
-# Crear directorio de estado
-sudo mkdir -p /var/lib/neon-watchdog
-sudo chown neon-watchdog:neon-watchdog /var/lib/neon-watchdog
-
-# Editar systemd service
-sudo nano /etc/systemd/system/neon-watchdog.service
-# Descomentar: User=neon-watchdog y Group=neon-watchdog
-
-sudo systemctl daemon-reload
 ```
-
-**Nota:** El usuario `neon-watchdog` necesitará permisos para:
-- Leer PID files
-- Conectar a puertos
-- Ejecutar comandos/systemctl (puede requerir sudoers)
-
-### Evitar tormentas de reinicio
-
-Las políticas integradas previenen loops infinitos:
-
-- `fail_threshold`: No reiniciar al primer fallo
-- `restart_cooldown_seconds`: Mínimo tiempo entre reinicios
-- `max_restarts_per_hour`: Rate limit absoluto
-
-### Timeouts
-
-Todos los checks y acciones tienen timeout configurable para evitar que el watchdog se cuelgue.
+2026-01-09T10:30:45Z level=INFO msg="target healthy" target=nginx check=process_name latency_ms=2
+2026-01-09T10:31:15Z level=WARN msg="check failed" target=api check=tcp_port error="connection refused"
+2026-01-09T10:31:15Z level=INFO msg="executing action" target=api action="systemd:restart"
+```
 
 ---
 
@@ -378,20 +420,20 @@ Todos los checks y acciones tienen timeout configurable para evitar que el watch
 
 ### El watchdog no detecta el proceso
 
-**Problema:** Check `process_name` falla pero el proceso existe.
+```bash
+# Verificar nombre exacto del proceso
+ps aux | grep nombre
 
-**Solución:**
-- Verifica el nombre exacto con `ps aux | grep nombre`
-- `pgrep -x` busca nombre exacto (sin path)
-- Considera usar `pid_file` o `tcp_port` en su lugar
+# Probar con pgrep
+pgrep -x nombre
+
+# Usar --verbose para ver detalles
+neon-watchdog check -c config.yml --verbose
+```
 
 ### Permisos denegados en systemctl
 
-**Problema:** `systemctl restart` falla con permiso denegado.
-
-**Solución:**
-- Ejecutar neon-watchdog como root, o
-- Configurar sudoers para permitir comandos específicos sin password:
+Si ejecutas como usuario no-root, configura sudoers:
 
 ```bash
 # /etc/sudoers.d/neon-watchdog
@@ -400,22 +442,24 @@ neon-watchdog ALL=(root) NOPASSWD: /bin/systemctl restart nginx.service
 
 ### El timer no se ejecuta
 
-**Problema:** `systemctl status neon-watchdog.timer` muestra "inactive".
-
-**Solución:**
 ```bash
-sudo systemctl enable neon-watchdog.timer
-sudo systemctl start neon-watchdog.timer
-systemctl list-timers --all | grep neon
+# Verificar estado del timer
+systemctl status neon-watchdog.timer
+
+# Ver cuándo se ejecutará
+systemctl list-timers | grep neon
+
+# Habilitar y arrancar
+sudo systemctl enable --now neon-watchdog.timer
 ```
 
-### Ver debug completo
+### Ver Debug Completo
 
 ```bash
-# Modo verbose manual
-neon-watchdog check -c /etc/neon-watchdog/config.yml --verbose
+# Ejecutar con verbose
+neon-watchdog check -c config.yml --verbose
 
-# O cambiar en config
+# O cambiar nivel en config
 log_level: DEBUG
 ```
 
@@ -431,8 +475,8 @@ log_level: DEBUG
               │
               ▼
 ┌─────────────────────────────────────────┐
-│         Configuration Loader            │
-│     (YAML/JSON + Validation)            │
+│      Configuration Loader               │
+│      (YAML/JSON + Validation)           │
 └─────────────┬───────────────────────────┘
               │
               ▼
@@ -451,56 +495,12 @@ log_level: DEBUG
 │   Checkers   │          │   Actions    │
 │ - Process    │          │ - Systemd    │
 │ - PID file   │          │ - Exec       │
-│ - TCP port   │          └──────────────┘
-│ - Command    │
+│ - TCP port   │          │ - Hooks      │
+│ - HTTP       │          └──────────────┘
+│ - Script     │
+│ - Logic      │
 └──────────────┘
 ```
-
----
-
-## 🧪 Testing
-
-### Test manual
-
-1. Levanta un servidor de prueba:
-```bash
-python3 -m http.server 8888
-```
-
-2. Configura un target:
-```yaml
-- name: test-server
-  enabled: true
-  checks:
-    - type: tcp_port
-      tcp_port: "8888"
-  action:
-    type: exec
-    exec:
-      restart:
-        - /bin/echo
-        - "Server would restart here"
-```
-
-3. Ejecuta y mata el servidor para ver la recuperación:
-```bash
-neon-watchdog check -c test-config.yml --verbose
-# En otra terminal: pkill -f "http.server 8888"
-neon-watchdog check -c test-config.yml --verbose
-```
-
----
-
-## 🗺️ Roadmap
-
-- [ ] Reload de configuración sin reinicio (SIGHUP)
-- [ ] Healthcheck HTTP nativo (GET /health)
-- [ ] Notificaciones (email, Telegram, Discord webhook)
-- [ ] Métricas Prometheus (endpoint `/metrics`)
-- [ ] Auto-instalación de systemd desde CLI
-- [ ] Dashboard web (opcional)
-- [ ] Soporte Docker/Podman containers
-- [ ] Integración con Consul/etcd para config distribuida
 
 ---
 
@@ -512,21 +512,21 @@ MIT License - Ver [LICENSE](LICENSE) para más detalles.
 
 ## 🤝 Contribuir
 
-Contribuciones son bienvenidas! Por favor:
+¡Las contribuciones son bienvenidas! Por favor:
 
-1. Fork el proyecto
-2. Crea una branch (`git checkout -b feature/amazing-feature`)
-3. Commit tus cambios (`git commit -m 'Add amazing feature'`)
-4. Push a la branch (`git push origin feature/amazing-feature`)
+1. Haz fork del proyecto
+2. Crea una rama para tu feature (`git checkout -b feature/amazing`)
+3. Commit tus cambios (`git commit -am 'Add amazing feature'`)
+4. Push a la rama (`git push origin feature/amazing`)
 5. Abre un Pull Request
 
 ---
 
-## 📞 Soporte
+## 📮 Contacto
 
-- **Issues:** [GitHub Issues](https://github.com/tgextreme/neon-watchdog/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/tgextreme/neon-watchdog/discussions)
+- **GitHub**: [github.com/tgextreme/neon-watchdog](https://github.com/tgextreme/neon-watchdog)
+- **Issues**: [github.com/tgextreme/neon-watchdog/issues](https://github.com/tgextreme/neon-watchdog/issues)
 
 ---
 
-**Hecho con ❤️ para la comunidad Linux**
+**Hecho con ❤️ para mantener tus servicios siempre en marcha**

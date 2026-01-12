@@ -26,9 +26,26 @@ Thumbs.db
 # State files
 *.state
 /var/
+state.json
+state-local.json
 
 # Logs
 *.log
+*.log.*
+
+# Configuration locals
+config-local.yml
+users.txt
+users-local.txt
+
+# Temporary files
+*.tmp
+*.bak
+*.old
+
+# Coverage
+coverage.out
+coverage.html
 
 # Symlinks
 proyecto-web
